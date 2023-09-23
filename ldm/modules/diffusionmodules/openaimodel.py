@@ -822,11 +822,11 @@ class UNetModel(nn.Module):
             # --------------- FreeU code -----------------------
             # Only operate on the first two stages
             if h.shape[1] == 1280:
-                h[:,:640] = h[:,:640] * self.b1
-                hs_ = Fourier_filter(hs_, threshold=1, scale=self.s1)
+                h[:,:640] = h[:,:640] * 1.2
+                hs_ = Fourier_filter(hs_, threshold=1, scale=0.9)
             if h.shape[1] == 640:
-                h[:,:320] = h[:,:320] * self.b2
-                hs_ = Fourier_filter(hs_, threshold=1, scale=self.s2)
+                h[:,:320] = h[:,:320] * 1.4
+                hs_ = Fourier_filter(hs_, threshold=1, scale=0.2)
             # ---------------------------------------------------------
 
             h = th.cat([h, hs_], dim=1)
