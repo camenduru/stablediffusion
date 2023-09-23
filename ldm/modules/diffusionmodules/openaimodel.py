@@ -772,6 +772,25 @@ class UNetModel(nn.Module):
         self.middle_block.apply(convert_module_to_f32)
         self.output_blocks.apply(convert_module_to_f32)
 
+    from scipy import fft
+    def Fourier_filter(x, threshold, scale):
+        # FFT
+        x_freq = fft.fftn(x, dim=(-2, -1))
+        x_freq = fft.fftshift(x_freq, dim=(-2, -1))
+        
+        B, C, H, W = x_freq.shape
+        mask = torch.ones((B, C, H, W)).cuda() 
+
+        crow, ccol = H // 2, W //2
+        mask[..., crow - threshold:crow + threshold, ccol - threshold:ccol + threshold] = scale
+        x_freq = x_freq * mask
+
+        # IFFT
+        x_freq = fft.ifftshift(x_freq, dim=(-2, -1))
+        x_filtered = fft.ifftn(x_freq, dim=(-2, -1)).real
+        
+        return x_filtered
+
     def forward(self, x, timesteps=None, context=None, y=None,**kwargs):
         """
         Apply the model to an input batch.
@@ -798,7 +817,19 @@ class UNetModel(nn.Module):
             hs.append(h)
         h = self.middle_block(h, emb, context)
         for module in self.output_blocks:
-            h = th.cat([h, hs.pop()], dim=1)
+            hs_ = hs.pop()
+
+            # --------------- FreeU code -----------------------
+            # Only operate on the first two stages
+            if h.shape[1] == 1280:
+                h[:,:640] = h[:,:640] * self.b1
+                hs_ = Fourier_filter(hs_, threshold=1, scale=self.s1)
+            if h.shape[1] == 640:
+                h[:,:320] = h[:,:320] * self.b2
+                hs_ = Fourier_filter(hs_, threshold=1, scale=self.s2)
+            # ---------------------------------------------------------
+
+            h = th.cat([h, hs_], dim=1)
             h = module(h, emb, context)
         h = h.type(x.dtype)
         if self.predict_codebook_ids:
